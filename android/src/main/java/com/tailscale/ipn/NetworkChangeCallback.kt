@@ -37,6 +37,9 @@ object NetworkChangeCallback {
   var cachedDefaultInterfaceName: String? = null
     private set
 
+  @Volatile
+  var preferCellular: Boolean = false
+
   // monitorDnsChanges sets up a network callback to monitor changes to the
   // system's network state and update the DNS configuration when interfaces
   // become available or properties of those interfaces change.
@@ -104,12 +107,18 @@ object NetworkChangeCallback {
         })
   }
 
-  // pickNonMetered returns the first non-metered network in the list of
-  // networks, or the first network if none are non-metered.
-  private fun pickNonMetered(networks: Map<Network, NetworkInfo>): Network? {
-    for ((network, info) in networks) {
-      if (info.caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)) {
-        return network
+  private fun pickPreferredNetwork(networks: Map<Network, NetworkInfo>): Network? {
+    if (preferCellular) {
+      for ((network, info) in networks) {
+        if (!info.caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)) {
+          return network
+        }
+      }
+    } else {
+      for ((network, info) in networks) {
+        if (info.caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)) {
+          return network
+        }
       }
     }
     return networks.keys.firstOrNull()
@@ -129,11 +138,9 @@ object NetworkChangeCallback {
               info.linkProps.dnsServers.isNotEmpty()
         }
 
-    // If we have one; just return it; otherwise, prefer networks that are also
-    // not metered (i.e. cell modems).
-    val nonMeteredNetwork = pickNonMetered(networks)
-    if (nonMeteredNetwork != null) {
-      return nonMeteredNetwork
+    val preferredNetwork = pickPreferredNetwork(networks)
+    if (preferredNetwork != null) {
+      return preferredNetwork
     }
 
     // Okay, less good; just return the first network that has the INTERNET and

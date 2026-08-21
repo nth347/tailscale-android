@@ -180,7 +180,11 @@ open class IPNService : VpnService(), libtailscale.IPNService {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
       b.setMetered(false) // Inherit the metered status from the underlying networks.
     }
-    b.setUnderlyingNetworks(null) // Use all available networks.
+    if (NetworkChangeCallback.preferCellular && NetworkChangeCallback.cachedDefaultNetwork != null) {
+      b.setUnderlyingNetworks(arrayOf(NetworkChangeCallback.cachedDefaultNetwork))
+    } else {
+      b.setUnderlyingNetworks(null)
+    }
 
     val mdmAllowed =
         MDMSettings.includedPackages.flow.value.value?.split(",")?.map { it.trim() } ?: emptyList()

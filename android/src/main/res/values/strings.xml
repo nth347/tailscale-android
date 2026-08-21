@@ -356,6 +356,8 @@
     <string name="run_as_subnet_router">Run as subnet router</string>
     <string name="use_tailscale_subnets_subtitle">Route traffic according to your network\'s rules. Some networks require this to access IP addresses that don\'t start with 100.x.y.z.</string>
     <string name="subnet_routing">Subnet routing</string>
+    <string name="prefer_cellular">Prefer cellular</string>
+    <string name="prefer_cellular_subtitle">Use cellular network for VPN tunnel instead of Wi-Fi. Enable when Wi-Fi blocks VPN traffic.</string>
     <string name="client_remote_logging_enabled">Remote client logging</string>
     <string name="client_remote_logging_enabled_subtitle">Whether debug &amp; opt-in flow logs are uploaded.</string>
     <string name="client_remote_logging_enabled_subtitle_mdm">Client logging is always enabled for devices under remote management.</string>

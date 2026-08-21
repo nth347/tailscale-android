@@ -170,6 +170,8 @@ class App : UninitializedApp(), libtailscale.AppContext, ViewModelStoreOwner {
     }
     healthNotifier = HealthNotifier(Notifier.health, Notifier.state, applicationScope)
     connectivityManager = this.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    val prefs = getSharedPreferences("tailscale_prefs", Context.MODE_PRIVATE)
+    NetworkChangeCallback.preferCellular = prefs.getBoolean("prefer_cellular", false)
     NetworkChangeCallback.monitorDnsChanges(connectivityManager, dns)
     initViewModels()
     applicationScope.launch {
