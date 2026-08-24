@@ -70,11 +70,14 @@ fun TelegramReportView(backToAdvanced: BackNavigation) {
       remember { mutableStateOf(TelegramReporter.hasLocationPermission(context)) }
   var backgroundLocationGranted by
       remember { mutableStateOf(TelegramReporter.hasBackgroundLocationPermission(context)) }
+  var locationServicesOn by
+      remember { mutableStateOf(TelegramReporter.locationServicesEnabled(context)) }
 
   val locationLauncher =
       rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         locationGranted = granted
         backgroundLocationGranted = TelegramReporter.hasBackgroundLocationPermission(context)
+        locationServicesOn = TelegramReporter.locationServicesEnabled(context)
       }
 
   val lifecycleOwner = LocalLifecycleOwner.current
@@ -83,6 +86,7 @@ fun TelegramReportView(backToAdvanced: BackNavigation) {
       if (event == Lifecycle.Event.ON_RESUME) {
         locationGranted = TelegramReporter.hasLocationPermission(context)
         backgroundLocationGranted = TelegramReporter.hasBackgroundLocationPermission(context)
+        locationServicesOn = TelegramReporter.locationServicesEnabled(context)
       }
     }
     lifecycleOwner.lifecycle.addObserver(observer)
@@ -145,13 +149,16 @@ fun TelegramReportView(backToAdvanced: BackNavigation) {
           subtitle =
               stringResource(
                   when {
-                    backgroundLocationGranted -> R.string.telegram_wifi_name_on
-                    locationGranted -> R.string.telegram_wifi_name_foreground
-                    else -> R.string.telegram_wifi_name_off
+                    !locationGranted -> R.string.telegram_wifi_name_off
+                    !locationServicesOn -> R.string.telegram_wifi_name_location_off
+                    !backgroundLocationGranted -> R.string.telegram_wifi_name_foreground
+                    else -> R.string.telegram_wifi_name_on
                   }),
           onClick = {
             if (!locationGranted) {
               locationLauncher.launch(android.Manifest.permission.ACCESS_FINE_LOCATION)
+            } else if (!locationServicesOn) {
+              context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
             } else if (!backgroundLocationGranted &&
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
               openAppSettings()

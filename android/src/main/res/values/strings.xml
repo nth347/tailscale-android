@@ -373,6 +373,7 @@
     <string name="telegram_report_time">Report time</string>
     <string name="telegram_wifi_name">Include Wi-Fi network name</string>
     <string name="telegram_wifi_name_on">On. The report names the connected Wi-Fi network.</string>
+    <string name="telegram_wifi_name_location_off">Permission granted, but Location is turned off on this device. Tap to turn it on, otherwise Android hides the network name.</string>
     <string name="telegram_wifi_name_foreground">Granted for foreground only. Tap to set location access to \"Allow all the time\", otherwise the scheduled report cannot read the network name.</string>
     <string name="telegram_wifi_name_off">Off. Android only reveals the Wi-Fi network name to apps with location access. Tap to grant.</string>
     <string name="telegram_report_heading">Tailscale daily report</string>

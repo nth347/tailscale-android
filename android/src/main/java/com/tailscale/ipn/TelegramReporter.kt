@@ -8,11 +8,14 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.os.BatteryManager
 import android.os.Build
+import android.provider.Settings
+import android.telephony.TelephonyManager
 import android.text.format.DateFormat
 import androidx.core.content.ContextCompat
 import com.tailscale.ipn.ui.model.Ipn
@@ -69,7 +72,7 @@ object TelegramReporter {
       appendLine("Time: ${format(System.currentTimeMillis())}")
       appendLine("Battery: ${batteryStatus(context)}")
       appendLine("Wi-Fi: ${wifiStatus(context, wifi)}")
-      appendLine("Mobile data: ${if (cellular) "connected" else "disconnected"}")
+      appendLine("Mobile data: ${mobileDataStatus(context, cellular, wifi)}")
       append("Tailscale VPN: ${if (vpnUp(connectivityManager)) "up" else "down"}")
     }
   }
@@ -82,6 +85,62 @@ object TelegramReporter {
   fun formatReportTime(context: Context): String =
       formatTime(context, AdvancedPrefs.reportHour, AdvancedPrefs.reportMinute)
 
+  private fun mobileDataStatus(
+      context: Context,
+      cellularConnected: Boolean,
+      wifiConnected: Boolean
+  ): String {
+    if (cellularConnected) {
+      return "connected"
+    }
+    if (simAbsent(context)) {
+      return "no SIM"
+    }
+    return when (mobileDataEnabled(context)) {
+      true -> if (wifiConnected) "on, idle (Wi-Fi in use)" else "on, no connection"
+      false -> "off"
+      else -> "disconnected"
+    }
+  }
+
+  private fun simAbsent(context: Context): Boolean {
+    val telephonyManager =
+        context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager ?: return false
+    return telephonyManager.simState == TelephonyManager.SIM_STATE_ABSENT
+  }
+
+  private fun mobileDataEnabled(context: Context): Boolean? {
+    val telephonyManager =
+        context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+    if (telephonyManager != null) {
+      try {
+        return telephonyManager.isDataEnabled
+      } catch (e: Exception) {
+        TSLog.d(TAG, "isDataEnabled unavailable: $e")
+      }
+    }
+    return try {
+      when (Settings.Global.getInt(context.contentResolver, "mobile_data", -1)) {
+        1 -> true
+        0 -> false
+        else -> null
+      }
+    } catch (e: Exception) {
+      null
+    }
+  }
+
+  fun locationServicesEnabled(context: Context): Boolean {
+    val locationManager =
+        context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return false
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+      locationManager.isLocationEnabled
+    } else {
+      locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER) ||
+          locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+    }
+  }
+
   private fun wifiStatus(context: Context, connected: Boolean): String {
     if (!connected) {
       return "nothing connected"
@@ -92,7 +151,7 @@ object TelegramReporter {
 
   @Suppress("DEPRECATION")
   fun wifiNetworkName(context: Context): String? {
-    if (!hasLocationPermission(context)) {
+    if (!hasLocationPermission(context) || !locationServicesEnabled(context)) {
       return null
     }
     val wifiManager =
