@@ -32,8 +32,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.tailscale.ipn.BuildConfig
 import com.tailscale.ipn.R
-import com.tailscale.ipn.App
-import com.tailscale.ipn.NetworkChangeCallback
 import com.tailscale.ipn.mdm.AlwaysNeverUserDecides
 import com.tailscale.ipn.mdm.MDMSettings
 import com.tailscale.ipn.mdm.ShowHide
@@ -67,7 +65,6 @@ fun SettingsView(
   val useTailscaleSubnets by MDMSettings.useTailscaleSubnets.flow.collectAsState()
   val isClientRemoteLoggingEnabled by viewModel.isClientRemoteLoggingEnabled.collectAsState()
   var showDisableLoggingDialog by remember { mutableStateOf(false) }
-  var preferCellular by remember { mutableStateOf(NetworkChangeCallback.preferCellular) }
 
   Scaffold(
       topBar = {
@@ -118,16 +115,10 @@ fun SettingsView(
           }
 
           Lists.ItemDivider()
-          Setting.Switch(
-              R.string.prefer_cellular,
-              subtitle = stringResource(R.string.prefer_cellular_subtitle),
-              isOn = preferCellular,
-              onToggle = {
-                preferCellular = !preferCellular
-                NetworkChangeCallback.preferCellular = preferCellular
-                App.get().getSharedPreferences("tailscale_prefs", android.content.Context.MODE_PRIVATE)
-                    .edit().putBoolean("prefer_cellular", preferCellular).apply()
-              })
+          Setting.Text(
+              R.string.advanced,
+              subtitle = stringResource(R.string.advanced_subtitle),
+              onClick = settingsNav.onNavigateToAdvancedSettings)
 
           Lists.ItemDivider()
           Setting.Switch(
@@ -293,5 +284,5 @@ fun SettingsPreview() {
   vm.tailNetLockEnabled.set(true)
   vm.isAdmin.set(true)
   vm.managedByOrganization.set("Tails and Scales Inc.")
-  SettingsView(SettingsNav({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}), vm)
+  SettingsView(SettingsNav({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}), vm)
 }

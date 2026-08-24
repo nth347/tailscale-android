@@ -109,6 +109,7 @@ class App : UninitializedApp(), libtailscale.AppContext, ViewModelStoreOwner {
     super.onCreate()
     appInstance = this
     setUnprotectedInstance(this)
+    AdvancedPrefs.init(this)
     mdmChangeReceiver = MDMSettingsChangedReceiver()
     val filter = IntentFilter(Intent.ACTION_APPLICATION_RESTRICTIONS_CHANGED)
     registerReceiver(mdmChangeReceiver, filter)
@@ -170,9 +171,11 @@ class App : UninitializedApp(), libtailscale.AppContext, ViewModelStoreOwner {
     }
     healthNotifier = HealthNotifier(Notifier.health, Notifier.state, applicationScope)
     connectivityManager = this.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-    val prefs = getSharedPreferences("tailscale_prefs", Context.MODE_PRIVATE)
-    NetworkChangeCallback.preferCellular = prefs.getBoolean("prefer_cellular", false)
     NetworkChangeCallback.monitorDnsChanges(connectivityManager, dns)
+    AutoReconnect.start(applicationScope)
+    if (AdvancedPrefs.telegramReportEnabled && AdvancedPrefs.telegramConfigured()) {
+      TelegramReporter.scheduleNextReport(this)
+    }
     initViewModels()
     applicationScope.launch {
       val restrictionsManager =
@@ -198,6 +201,7 @@ class App : UninitializedApp(), libtailscale.AppContext, ViewModelStoreOwner {
                 notifyStatus(vpnRunning = false, hideDisconnectAction = hideDisconnectAction.value)
               }
               val vpnRunning = state == Ipn.State.Starting || state == Ipn.State.Running
+              AdvancedPrefs.vpnWasRunning = vpnRunning
               updateConnStatus(ableToStartVPN)
               QuickToggleService.setVPNRunning(vpnRunning)
               // Update notification status when VPN is running

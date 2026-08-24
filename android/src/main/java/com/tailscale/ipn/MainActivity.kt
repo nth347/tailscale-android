@@ -65,6 +65,7 @@ import com.tailscale.ipn.ui.util.AndroidTVUtil
 import com.tailscale.ipn.ui.util.set
 import com.tailscale.ipn.ui.util.universalFit
 import com.tailscale.ipn.ui.view.AboutView
+import com.tailscale.ipn.ui.view.AdvancedSettingsView
 import com.tailscale.ipn.ui.view.BugReportView
 import com.tailscale.ipn.ui.view.DNSSettingsView
 import com.tailscale.ipn.ui.view.ExitNodePicker
@@ -92,6 +93,7 @@ import com.tailscale.ipn.ui.view.SubnetRoutingView
 import com.tailscale.ipn.ui.view.TaildropDirView
 import com.tailscale.ipn.ui.view.TaildropDirectoryPickerPrompt
 import com.tailscale.ipn.ui.view.TailnetLockSetupView
+import com.tailscale.ipn.ui.view.TelegramReportView
 import com.tailscale.ipn.ui.view.UserSwitcherNav
 import com.tailscale.ipn.ui.view.UserSwitcherView
 import com.tailscale.ipn.ui.viewModel.AppViewModel
@@ -310,6 +312,10 @@ class MainActivity : ComponentActivity() {
                           onNavigateToManagedBy = { navController.navigate("managedBy") },
                           onNavigateToUserSwitcher = { navController.navigate("userSwitcher") },
                           onNavigateToPermissions = { navController.navigate("permissions") },
+                          onNavigateToAdvancedSettings = {
+                            navController.navigate("advancedSettings")
+                          },
+                          onNavigateToTelegramReport = { navController.navigate("telegramReport") },
                           onBackToSettings = backTo("settings"),
                           onNavigateBackHome = backTo("main"))
                   val exitNodePickerNav =
@@ -375,6 +381,10 @@ class MainActivity : ComponentActivity() {
                   composable("splitTunneling") { SplitTunnelAppPickerView(backTo("settings")) }
                   composable("tailnetLock") { TailnetLockSetupView(backTo("settings")) }
                   composable("subnetRouting") { SubnetRoutingView(backTo("settings")) }
+                  composable("advancedSettings") {
+                    AdvancedSettingsView(backTo("settings"), settingsNav.onNavigateToTelegramReport)
+                  }
+                  composable("telegramReport") { TelegramReportView(backTo("advancedSettings")) }
                   composable("about") { AboutView(backTo("settings")) }
                   composable("mdmSettings") { MDMSettingsDebugView(backTo("settings")) }
                   composable("managedBy") { ManagedByView(backTo("settings")) }

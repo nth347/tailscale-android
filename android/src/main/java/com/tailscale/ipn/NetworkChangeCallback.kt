@@ -37,8 +37,7 @@ object NetworkChangeCallback {
   var cachedDefaultInterfaceName: String? = null
     private set
 
-  @Volatile
-  var preferCellular: Boolean = false
+  @Volatile var onDefaultNetworkChanged: ((Network?) -> Unit)? = null
 
   // monitorDnsChanges sets up a network callback to monitor changes to the
   // system's network state and update the DNS configuration when interfaces
@@ -108,20 +107,28 @@ object NetworkChangeCallback {
   }
 
   private fun pickPreferredNetwork(networks: Map<Network, NetworkInfo>): Network? {
-    if (preferCellular) {
-      for ((network, info) in networks) {
-        if (!info.caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)) {
-          return network
-        }
+    if (AdvancedPrefs.preferCellular) {
+      pickByTransport(networks, NetworkCapabilities.TRANSPORT_CELLULAR)?.let { return it }
+      pickByTransport(networks, NetworkCapabilities.TRANSPORT_WIFI)?.let {
+        TSLog.d(TAG, "prefer cellular is on but no cellular network is available; using Wi-Fi")
+        return it
       }
-    } else {
-      for ((network, info) in networks) {
-        if (info.caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)) {
-          return network
-        }
+    }
+    for ((network, info) in networks) {
+      if (info.caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)) {
+        return network
       }
     }
     return networks.keys.firstOrNull()
+  }
+
+  private fun pickByTransport(networks: Map<Network, NetworkInfo>, transport: Int): Network? {
+    for ((network, info) in networks) {
+      if (info.caps.hasTransport(transport)) {
+        return network
+      }
+    }
+    return null
   }
 
   // pickDefaultNetwork returns a non-VPN network to use as the 'default'
@@ -166,6 +173,7 @@ object NetworkChangeCallback {
   // Update cached default network + log interface name.
   private fun recomputeDefaultNetworkLocked(why: String) {
     val newNetwork = pickDefaultNetwork()
+    val changed = newNetwork != cachedDefaultNetwork
     cachedDefaultNetwork = newNetwork
 
     val info = if (newNetwork != null) activeNetworks[newNetwork] else null
@@ -174,6 +182,10 @@ object NetworkChangeCallback {
 
     TSLog.d(
         TAG, "$why: cachedDefaultNetwork=$newNetwork iface=${cachedDefaultInterfaceName ?: "none"}")
+
+    if (changed) {
+      onDefaultNetworkChanged?.invoke(newNetwork)
+    }
   }
 
   // maybeUpdateDNSConfig will maybe update our DNS configuration based on the

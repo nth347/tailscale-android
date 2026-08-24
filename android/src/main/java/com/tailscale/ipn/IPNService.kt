@@ -5,6 +5,7 @@ package com.tailscale.ipn
 import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Network
 import android.net.VpnService
 import android.os.Build
 import android.system.OsConstants
@@ -38,11 +39,14 @@ open class IPNService : VpnService(), libtailscale.IPNService {
     super.onCreate()
     // grab app to make sure it initializes
     app = App.get()
+    instance = this
+    NetworkChangeCallback.onDefaultNetworkChanged = { applyUnderlyingNetworks(it) }
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int =
       when (intent?.action) {
         ACTION_STOP_VPN -> {
+          AutoReconnect.onUserStopped()
           app.setWantRunning(false)
           close()
           START_NOT_STICKY
@@ -62,6 +66,7 @@ open class IPNService : VpnService(), libtailscale.IPNService {
           START_NOT_STICKY
         }
         ACTION_START_VPN -> {
+          AutoReconnect.onUserStarted()
           showForegroundNotification()
           app.setWantRunning(true)
           Libtailscale.requestVPN(this)
@@ -109,14 +114,29 @@ open class IPNService : VpnService(), libtailscale.IPNService {
   }
 
   override fun onDestroy() {
+    if (instance === this) {
+      instance = null
+      NetworkChangeCallback.onDefaultNetworkChanged = null
+    }
     close()
     updateVpnStatus(false)
     super.onDestroy()
   }
 
+  override fun onTaskRemoved(rootIntent: Intent?) {
+    if (!AdvancedPrefs.runInBackground) {
+      TSLog.d(TAG, "app closed by the user and running in background is off; stopping the tunnel")
+      AutoReconnect.onUserStopped()
+      app.setWantRunning(false)
+      close()
+    }
+    super.onTaskRemoved(rootIntent)
+  }
+
   override fun onRevoke() {
     // VPN permission was granted to another app, so tell the Go backend and then set prepared to be
     // false so that when user attempts to connect again, VpnService.prepare() is called
+    AutoReconnect.onUserStopped()
     app.setWantRunning(false)
     setVpnPrepared(false)
     close()
@@ -180,8 +200,9 @@ open class IPNService : VpnService(), libtailscale.IPNService {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
       b.setMetered(false) // Inherit the metered status from the underlying networks.
     }
-    if (NetworkChangeCallback.preferCellular && NetworkChangeCallback.cachedDefaultNetwork != null) {
-      b.setUnderlyingNetworks(arrayOf(NetworkChangeCallback.cachedDefaultNetwork))
+    val preferred = NetworkChangeCallback.cachedDefaultNetwork
+    if (AdvancedPrefs.preferCellular && preferred != null) {
+      b.setUnderlyingNetworks(arrayOf(preferred))
     } else {
       b.setUnderlyingNetworks(null)
     }
@@ -231,7 +252,25 @@ open class IPNService : VpnService(), libtailscale.IPNService {
     return VPNServiceBuilder(b)
   }
 
+  private fun applyUnderlyingNetworks(network: Network?) {
+    try {
+      if (AdvancedPrefs.preferCellular && network != null) {
+        setUnderlyingNetworks(arrayOf(network))
+      } else {
+        setUnderlyingNetworks(null)
+      }
+    } catch (e: Exception) {
+      TSLog.e(TAG, "failed to update underlying networks: $e")
+    }
+  }
+
   companion object {
+    @Volatile private var instance: IPNService? = null
+
+    fun refreshUnderlyingNetworks() {
+      instance?.applyUnderlyingNetworks(NetworkChangeCallback.cachedDefaultNetwork)
+    }
+
     const val ACTION_START_VPN = "com.tailscale.ipn.START_VPN"
     const val ACTION_STOP_VPN = "com.tailscale.ipn.STOP_VPN"
     const val ACTION_RESTART_VPN = "com.tailscale.ipn.RESTART_VPN"
