@@ -16,6 +16,7 @@ object AdvancedPrefs {
   private const val KEY_TELEGRAM_ENABLED = "telegram_report_enabled"
   private const val KEY_TELEGRAM_BOT_TOKEN = "telegram_bot_token"
   private const val KEY_TELEGRAM_CHAT_ID = "telegram_chat_id"
+  private const val KEY_TELEGRAM_PREFER_CELLULAR = "telegram_prefer_cellular"
   private const val KEY_REPORT_HOUR = "telegram_report_hour"
   private const val KEY_REPORT_MINUTE = "telegram_report_minute"
 
@@ -61,6 +62,10 @@ object AdvancedPrefs {
   var telegramChatId: String
     get() = getString(KEY_TELEGRAM_CHAT_ID)
     set(value) = putString(KEY_TELEGRAM_CHAT_ID, value)
+
+  var telegramPreferCellular: Boolean
+    get() = getBoolean(KEY_TELEGRAM_PREFER_CELLULAR, false)
+    set(value) = putBoolean(KEY_TELEGRAM_PREFER_CELLULAR, value)
 
   var reportHour: Int
     get() = getInt(KEY_REPORT_HOUR, DEFAULT_REPORT_HOUR).coerceIn(0, 23)

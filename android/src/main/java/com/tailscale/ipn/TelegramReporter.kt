@@ -10,7 +10,9 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.net.ConnectivityManager
+import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.wifi.WifiManager
 import android.os.BatteryManager
 import android.os.Build
@@ -31,11 +33,15 @@ import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 object TelegramReporter {
   private const val TAG = "TelegramReporter"
   private const val ALARM_REQUEST_CODE = 4242
   private const val TIMEOUT_MS = 20000
+  private const val CELLULAR_TIMEOUT_MS = 20000
   private const val UNKNOWN_SSID = "<unknown ssid>"
 
   const val ACTION_DAILY_REPORT = "com.tailscale.ipn.TELEGRAM_DAILY_REPORT"
@@ -57,7 +63,8 @@ object TelegramReporter {
     if (!AdvancedPrefs.telegramConfigured()) {
       return Result.failure(IllegalStateException("Telegram bot token or chat ID is not set"))
     }
-    return post(AdvancedPrefs.telegramBotToken, AdvancedPrefs.telegramChatId, buildReport(context))
+    return post(
+        context, AdvancedPrefs.telegramBotToken, AdvancedPrefs.telegramChatId, buildReport(context))
   }
 
   fun buildReport(context: Context): String {
@@ -110,8 +117,7 @@ object TelegramReporter {
   }
 
   private fun mobileDataEnabled(context: Context): Boolean? {
-    val telephonyManager =
-        context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+    val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
     if (telephonyManager != null) {
       try {
         return telephonyManager.isDataEnabled
@@ -241,20 +247,95 @@ object TelegramReporter {
     return false
   }
 
-  private fun post(botToken: String, chatId: String, text: String): Result<Unit> {
+  private fun post(context: Context, botToken: String, chatId: String, text: String): Result<Unit> {
+    val url = URL("https://api.telegram.org/bot$botToken/sendMessage")
     val body =
         "chat_id=${URLEncoder.encode(chatId, "UTF-8")}&text=${URLEncoder.encode(text, "UTF-8")}"
+    if (!AdvancedPrefs.telegramPreferCellular) {
+      return post(null, url, body)
+    }
+    val lease = requestCellularNetwork(context)
+    if (lease == null) {
+      TSLog.d(TAG, "prefer cellular is on but no cellular network is available; using default")
+      return post(null, url, body)
+    }
+    return try {
+      TSLog.d(TAG, "sending report over cellular network ${lease.network}")
+      post(lease.network, url, body)
+    } finally {
+      lease.release()
+    }
+  }
+
+  private fun requestCellularNetwork(context: Context): NetworkLease? {
+    val connectivityManager =
+        context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            ?: return null
+    val request =
+        NetworkRequest.Builder()
+            .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+            .build()
+    val available = AtomicReference<Network?>(null)
+    val settled = CountDownLatch(1)
+    val callback =
+        object : ConnectivityManager.NetworkCallback() {
+          override fun onAvailable(network: Network) {
+            available.compareAndSet(null, network)
+            settled.countDown()
+          }
+
+          override fun onUnavailable() {
+            settled.countDown()
+          }
+        }
+    return try {
+      connectivityManager.requestNetwork(request, callback, CELLULAR_TIMEOUT_MS)
+      settled.await(CELLULAR_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
+      val network = available.get()
+      if (network == null) {
+        unregister(connectivityManager, callback)
+        null
+      } else {
+        NetworkLease(network, connectivityManager, callback)
+      }
+    } catch (e: Exception) {
+      TSLog.e(TAG, "failed to request a cellular network: $e")
+      unregister(connectivityManager, callback)
+      null
+    }
+  }
+
+  private fun unregister(
+      connectivityManager: ConnectivityManager,
+      callback: ConnectivityManager.NetworkCallback
+  ) {
+    try {
+      connectivityManager.unregisterNetworkCallback(callback)
+    } catch (e: Exception) {
+      TSLog.d(TAG, "failed to unregister network callback: $e")
+    }
+  }
+
+  private class NetworkLease(
+      val network: Network,
+      private val connectivityManager: ConnectivityManager,
+      private val callback: ConnectivityManager.NetworkCallback
+  ) {
+    fun release() = TelegramReporter.unregister(connectivityManager, callback)
+  }
+
+  private fun post(network: Network?, url: URL, body: String): Result<Unit> {
     return try {
       val connection =
-          (URL("https://api.telegram.org/bot$botToken/sendMessage").openConnection()
-                  as HttpURLConnection)
-              .apply {
-                requestMethod = "POST"
-                doOutput = true
-                connectTimeout = TIMEOUT_MS
-                readTimeout = TIMEOUT_MS
-                setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
-              }
+          ((network?.openConnection(url) ?: url.openConnection()) as HttpURLConnection).apply {
+            requestMethod = "POST"
+            doOutput = true
+            connectTimeout = TIMEOUT_MS
+            readTimeout = TIMEOUT_MS
+            setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+          }
       try {
         connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
         val code = connection.responseCode
@@ -282,5 +363,6 @@ object TelegramReporter {
 
   private fun format(epochMillis: Long): String =
       DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
-          .format(Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()).toLocalDateTime())
+          .format(
+              Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()).toLocalDateTime())
 }

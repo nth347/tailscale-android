@@ -41,13 +41,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.tailscale.ipn.AdvancedPrefs
 import com.tailscale.ipn.R
 import com.tailscale.ipn.TelegramReporter
 import com.tailscale.ipn.ui.theme.listItem
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.tailscale.ipn.ui.util.Lists
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -62,16 +62,20 @@ fun TelegramReportView(backToAdvanced: BackNavigation) {
   var enabled by remember { mutableStateOf(AdvancedPrefs.telegramReportEnabled) }
   var botToken by remember { mutableStateOf(AdvancedPrefs.telegramBotToken) }
   var chatId by remember { mutableStateOf(AdvancedPrefs.telegramChatId) }
+  var preferCellular by remember { mutableStateOf(AdvancedPrefs.telegramPreferCellular) }
   var reportHour by remember { mutableStateOf(AdvancedPrefs.reportHour) }
   var reportMinute by remember { mutableStateOf(AdvancedPrefs.reportMinute) }
   var status by remember { mutableStateOf<String?>(null) }
   var busy by remember { mutableStateOf(false) }
-  var locationGranted by
-      remember { mutableStateOf(TelegramReporter.hasLocationPermission(context)) }
-  var backgroundLocationGranted by
-      remember { mutableStateOf(TelegramReporter.hasBackgroundLocationPermission(context)) }
-  var locationServicesOn by
-      remember { mutableStateOf(TelegramReporter.locationServicesEnabled(context)) }
+  var locationGranted by remember {
+    mutableStateOf(TelegramReporter.hasLocationPermission(context))
+  }
+  var backgroundLocationGranted by remember {
+    mutableStateOf(TelegramReporter.hasBackgroundLocationPermission(context))
+  }
+  var locationServicesOn by remember {
+    mutableStateOf(TelegramReporter.locationServicesEnabled(context))
+  }
 
   val locationLauncher =
       rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -144,6 +148,16 @@ fun TelegramReportView(backToAdvanced: BackNavigation) {
           })
 
       Lists.ItemDivider()
+      Setting.Switch(
+          R.string.telegram_prefer_cellular,
+          subtitle = stringResource(R.string.telegram_prefer_cellular_subtitle),
+          isOn = preferCellular,
+          onToggle = {
+            preferCellular = !preferCellular
+            AdvancedPrefs.telegramPreferCellular = preferCellular
+          })
+
+      Lists.ItemDivider()
       Setting.Text(
           R.string.telegram_wifi_name,
           subtitle =
@@ -211,7 +225,11 @@ fun TelegramReportView(backToAdvanced: BackNavigation) {
               Button(
                   enabled = !busy,
                   onClick = { status = if (persist()) savedMessage else notConfiguredMessage },
-                  content = { Text(stringResource(R.string.telegram_save)) })
+                  content = {
+                    Text(
+                        stringResource(R.string.telegram_save),
+                        style = MaterialTheme.typography.bodyMedium)
+                  })
               Box(modifier = Modifier.padding(start = 8.dp)) {
                 OutlinedButton(
                     enabled = !busy,
@@ -232,7 +250,11 @@ fun TelegramReportView(backToAdvanced: BackNavigation) {
                                 onFailure = { it.message ?: it.toString() })
                       }
                     },
-                    content = { Text(stringResource(R.string.telegram_send_test)) })
+                    content = {
+                      Text(
+                          stringResource(R.string.telegram_send_test),
+                          style = MaterialTheme.typography.bodyMedium)
+                    })
               }
             }
           })
@@ -258,7 +280,9 @@ private fun TelegramTextField(
 ) {
   ListItem(
       colors = MaterialTheme.colorScheme.listItem,
-      headlineContent = { Text(stringResource(titleRes)) },
+      headlineContent = {
+        Text(stringResource(titleRes), style = MaterialTheme.typography.bodyMedium)
+      },
       supportingContent = {
         OutlinedTextField(
             modifier = Modifier.fillMaxWidth(),
@@ -271,7 +295,7 @@ private fun TelegramTextField(
             value = value,
             onValueChange = onValueChange,
             placeholder = {
-              Text(stringResource(placeholderRes), style = MaterialTheme.typography.bodySmall)
+              Text(stringResource(placeholderRes), style = MaterialTheme.typography.bodyMedium)
             },
             keyboardOptions =
                 KeyboardOptions(
